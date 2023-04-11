@@ -1,0 +1,1 @@
+add_library(MSLogger ms_logger.cpp)
