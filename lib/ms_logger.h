@@ -9,6 +9,9 @@
 #include <fstream>
 #include "utilities.h"
 
+#define DEFAULT_BUFFER_SIZE 1024
+#define DEFAULT_LOGROTATE_SIZE 8192
+
 template <LEVELS LOGLEVEL=INFO>
 class ms_logger : public std::streambuf
 {
@@ -151,6 +154,7 @@ ms_logger<LOGLEVEL>::ms_logger()
 {
     buffer_ = (char*)malloc(bufferSize_);
     printf("Constructing %p (%ld,%d)\n",this,bufferSize_,LOGLEVEL);
+    generate_filename();
     setp(buffer_,buffer_+bufferSize_);
 }
 
@@ -215,7 +219,6 @@ std::streambuf::int_type ms_logger<LOGLEVEL>::overflow(std::streambuf::int_type 
 template <LEVELS LOGLEVEL>
 int ms_logger<LOGLEVEL>::sync()
 {
-    std::lock_guard<std::mutex> flk(mutFile_);
     write_to_file();
     memset(pbase(),0,epptr()-pbase()); // reset the buffer_
     setp(buffer_,buffer_+bufferSize_);
@@ -225,23 +228,33 @@ int ms_logger<LOGLEVEL>::sync()
 template <LEVELS LOGLEVEL>
 void ms_logger<LOGLEVEL>::write_to_file()
 {
-    printf("write_to_file %d\n",LOGLEVEL);
-    if(filepath_.empty())
-        generate_filename();
+    std::lock_guard<std::mutex> flk(mutFile_);
 
-    while(std::__fs::filesystem::exists(filepath_) && std::__fs::filesystem::file_size(filepath_) > 8192)
+    while(std::filesystem::exists(filepath_))
     {
-        fileindex_++;
-        generate_filename();
+        if(std::__fs::filesystem::file_size(filepath_) > DEFAULT_LOGROTATE_SIZE)
+        {
+            fileindex_++;
+            generate_filename();
+        }
+        else break;
     }
+    log_to_stdout("WRITING TO FILE " + filepath_,ERROR);
 
     if(!std::__fs::filesystem::exists(filepath_) || !file_.is_open())
-        file_.open(filepath_,std::ios::app);
-
-    log_to_stdout("FILESIZE = " + std::to_string(std::__fs::filesystem::file_size(filepath_)),DEBUG);
-    if(std::__fs::filesystem::file_size(filepath_) > 8192)
     {
-        log_to_stdout("CREATING NEW FILE = " + std::to_string(fileindex_),DEBUG);
+        log_to_stdout("CREATING AND OPENING " + filepath_,ERROR);
+        file_.close();
+        file_.open(filepath_,std::ios::app);
+    }
+    log_to_stdout("FILE " + filepath_ + " IS READY",ERROR);
+
+    log_to_stdout("CURRENT FILEPATH = " + filepath_ ,ERROR);
+    log_to_stdout("FILESIZE = " + std::to_string(std::__fs::filesystem::file_size(filepath_)),ERROR);
+    log_to_stdout("BUFSIZE = " + std::to_string(pptr()-pbase()),ERROR);
+    if(std::__fs::filesystem::file_size(filepath_) > DEFAULT_LOGROTATE_SIZE)
+    {
+        log_to_stdout(filepath_ + "CREATING NEW FILE = " + std::to_string(fileindex_),ERROR);
         file_.close();
         fileindex_++;
         generate_filename();
@@ -250,7 +263,11 @@ void ms_logger<LOGLEVEL>::write_to_file()
 
     file_.write(buffer_,pptr()-pbase());
     // check goodbits, errorbits, failbits, 
-    if(file_.good()) return;
+    if(file_.good()) 
+    {
+        log_to_stdout("GOODBIT " + std::to_string(file_.goodbit) + " WROTE " + std::to_string(pptr()-pbase()) ,INFO);
+        return;
+    }
     if(file_.bad()) 
         log_to_stdout("BADBIT " + std::to_string(file_.badbit),ERROR);
     if(file_.fail()) 
