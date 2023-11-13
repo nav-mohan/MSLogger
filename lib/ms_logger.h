@@ -263,6 +263,7 @@ void MsLogger<LOGLEVEL>::write_to_file()
     }
 
     file_.write(buffer_,pptr()-pbase());
+    file_.flush();
     // check goodbits, errorbits, failbits, 
     if(file_.good()) 
     {
