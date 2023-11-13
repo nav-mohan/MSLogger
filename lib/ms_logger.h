@@ -9,8 +9,8 @@
 #include <fstream>
 #include "utilities.h"
 
-#define DEFAULT_BUFFER_SIZE 1024
-#define DEFAULT_LOGROTATE_SIZE 8192
+#define DEFAULT_BUFFER_SIZE 1024 // 1KB
+#define DEFAULT_LOGROTATE_SIZE 1*1024*1024 // 1MB
 
 template <LEVELS LOGLEVEL=INFO>
 class MsLogger : public std::streambuf
@@ -275,7 +275,12 @@ void MsLogger<LOGLEVEL>::write_to_file()
         log_to_stdout("FAILBIT " + std::to_string(file_.failbit),WARN);
     if(file_.eof()) 
         log_to_stdout("EOFBIT " + std::to_string(file_.eofbit),INFO);
+}
 
+static void basic_log(std::string msg, LEVELS l=INFO)
+{
+    MsLogger<INFO>::get_instance().log_to_file(msg,l);
+    // MsLogger<INFO>::get_instance().log_to_stdout(msg,l);
 }
 
 #endif // MsLogger_H
